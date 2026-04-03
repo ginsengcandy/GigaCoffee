@@ -1,4 +1,4 @@
-package com.example.gigacoffee.domain.pointCharge.enums;
+package com.example.gigacoffee.domain.point.enums;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

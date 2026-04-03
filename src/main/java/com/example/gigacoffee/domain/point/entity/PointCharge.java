@@ -1,7 +1,7 @@
-package com.example.gigacoffee.domain.pointCharge.entity;
+package com.example.gigacoffee.domain.point.entity;
 
 import com.example.gigacoffee.common.entity.BaseEntity;
-import com.example.gigacoffee.domain.pointCharge.enums.PointChargeType;
+import com.example.gigacoffee.domain.point.enums.PointChargeType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
