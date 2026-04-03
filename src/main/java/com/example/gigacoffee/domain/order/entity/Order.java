@@ -3,7 +3,7 @@ package com.example.gigacoffee.domain.order.entity;
 import com.example.gigacoffee.common.entity.BaseEntity;
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
-import com.example.gigacoffee.domain.enums.OrderStatus;
+import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.orderMenu.entity.OrderMenu;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
