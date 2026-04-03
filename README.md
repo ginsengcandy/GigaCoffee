@@ -191,3 +191,113 @@ feat: 포인트 결제 API 구현
 트랜잭션 커밋 후 Kafka 이벤트 발행
 fix: 포인트 잔액 음수 허용 오류 수정
 chore: docker-compose MySQL 유저 추가
+
+## 기술적 판단: Orders - Users 간 JPA 연관관계 미적용
+
+### 결정
+
+`Orders` 엔티티에서 `User` 엔티티를 `@ManyToOne`으로 연관짓지 않고 `userId`를 값으로만 저장한다.
+
+### 근거
+
+첫째, 도메인 경계 분리를 위해서다.
+`order` 도메인이 `user` 도메인에 JPA 연관관계로 묶이면 `User` 엔티티 변경 시 `Orders`에도 영향이 생긴다.
+`userId`만 저장하면 두 도메인이 독립적으로 유지되고, 마이크로서비스로 확장할 때도 유리하다.
+
+둘째, 주문 이력 보존을 위해서다.
+유저가 탈퇴(soft delete)하더라도 주문 이력은 독립적으로 보존돼야 한다.
+JPA 연관관계로 묶으면 `users` 테이블에 강하게 결합되어 이 요구사항을 처리하기 복잡해진다.
+
+셋째, 대용량 트래픽 환경에서의 성능을 고려했다.
+DB 레벨의 FK 제약은 쓰기 성능에 부담이 될 수 있다.
+애플리케이션 레벨에서 userId 유효성을 검증하는 방식으로 대체한다.
+
+### 트레이드오프
+
+JPA 연관관계가 없으므로 `User` 정보가 필요한 경우 별도 조회가 필요하다.
+또한 DB 레벨의 참조 무결성이 보장되지 않으므로 애플리케이션 레벨에서 유효성 검증을 철저히 해야 한다.
+
+## 기술적 판단: Orders - OrderProduct 간 @OneToMany 적용
+
+### 결정
+
+`Orders` 엔티티에서 `OrderProduct`를 `@OneToMany`로 연관짓는다.
+```java
+@OneToMany(mappedBy = "orders", cascade = CascadeType.ALL, orphanRemoval = true)
+private List<OrderProduct> orderProducts = new ArrayList<>();
+```
+
+### 근거
+
+첫째, OrderProduct의 생명주기가 Orders에 완전히 종속된다.
+Orders 없이 OrderProduct는 존재할 수 없고, Orders가 삭제되면 OrderProduct도 함께 삭제돼야 한다.
+`cascade = CascadeType.ALL`과 `orphanRemoval = true`로 이 생명주기를 자동으로 관리한다.
+
+둘째, 주문 상품은 항상 주문과 함께 조회된다.
+주문 상품만 단독으로 조회하는 시나리오가 없어 @OneToMany로 묶는 것이 자연스럽다.
+
+셋째, @OneToMany 미적용 시 관리 포인트가 증가한다.
+cascade와 orphanRemoval을 직접 관리해야 하고, 도메인 응집도가 낮아진다.
+
+### N+1 방지
+
+@OneToMany는 N+1 문제가 발생하기 쉬우므로 fetch join으로 방지한다.
+```java
+@Query("SELECT o FROM Orders o JOIN FETCH o.orderProducts WHERE o.id = :id")
+Optional<Orders> findByIdWithProducts(@Param("id") Long id);
+```
+
+### 트레이드오프
+
+실무에서는 @OneToMany 남용을 지양한다.
+Orders → OrderProduct는 생명주기 종속성과 항상 함께 조회되는 특성이 있어 적용을 정당화할 수 있지만,
+다른 도메인 간 관계에서는 userId처럼 값으로만 참조하는 방식을 유지한다.
+
+## 기술적 판단: menus.name unique 제약 미적용
+
+### 결정
+
+`menus` 테이블의 `name` 컬럼에 unique 제약을 적용하지 않는다.
+
+### 근거
+
+첫째, soft delete 구조에서 unique 제약이 충돌한다.
+삭제된 메뉴(`deleted = true`)와 같은 이름의 메뉴를 재등록할 때 unique 제약 위반이 발생한다.
+조건부 unique로 우회할 수 있으나 `deleted = true`인 행이 여러 개 생기면 동일한 문제가 반복된다.
+
+둘째, 명시적인 요구사항이 없다.
+현재 요구사항에 메뉴 이름의 고유성을 강제해야 한다는 조건이 없다.
+불필요한 제약은 추후 요구사항 변경 시 오히려 장애물이 될 수 있다.
+
+셋째, 이름 중복이 필요한 시나리오가 존재한다.
+동일한 메뉴명에 옵션이나 사이즈가 추가되는 경우 이름이 겹칠 수 있어
+unique 제약이 비즈니스 확장을 제한할 수 있다.
+
+### 대안
+
+메뉴 이름 중복 방지가 필요하다면 DB 제약 대신 애플리케이션 레벨에서 검증하는 방식을 사용한다.
+이 경우 soft delete 상태를 고려한 유연한 검증이 가능하다.
+
+## 기술적 판단: OrderMenu.quantity 타입 선택 (int)
+
+### 결정
+
+`OrderMenu` 엔티티의 `quantity` 컬럼을 래퍼 타입 `Integer` 대신 원시 타입 `int`로 관리한다.
+
+### 근거
+
+수량은 null이 허용되면 안 되는 값이다.
+수량이 없는 주문 상품은 비즈니스적으로 의미가 없으므로 null을 원천 차단하는 것이 맞다.
+
+`int`는 기본적으로 null을 허용하지 않아 `@Column(nullable = false)`의 의도와 일치한다.
+반면 `Integer`를 사용하면 null 허용 가능성이 생기고, `@NotNull` 검증을 별도로 추가해야 한다.
+
+### null 안전성 보완
+
+`int`의 기본값은 0이므로 값이 누락됐을 때 0으로 저장될 위험이 있다.
+DTO에 `@Positive` 검증을 적용해 0 이하의 값을 차단한다.
+
+```java
+@Positive(message = "수량은 0보다 커야 합니다.")
+private int quantity;
+```
