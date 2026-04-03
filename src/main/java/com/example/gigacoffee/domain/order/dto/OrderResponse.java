@@ -1,6 +1,6 @@
 package com.example.gigacoffee.domain.order.dto;
 
-import com.example.gigacoffee.domain.enums.OrderStatus;
+import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.order.entity.Order;
 import com.example.gigacoffee.domain.orderMenu.dto.OrderMenuResponse;
 import lombok.Getter;

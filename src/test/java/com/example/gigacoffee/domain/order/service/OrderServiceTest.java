@@ -2,7 +2,7 @@ package com.example.gigacoffee.domain.order.service;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
-import com.example.gigacoffee.domain.enums.OrderStatus;
+import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.menu.entity.Menu;
 import com.example.gigacoffee.domain.menu.repository.MenuRepository;
 import com.example.gigacoffee.domain.order.dto.OrderRequest;

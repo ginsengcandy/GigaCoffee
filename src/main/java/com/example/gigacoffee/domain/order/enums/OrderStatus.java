@@ -1,4 +1,4 @@
-package com.example.gigacoffee.domain.enums;
+package com.example.gigacoffee.domain.order.enums;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
