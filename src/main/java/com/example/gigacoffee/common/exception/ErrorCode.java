@@ -16,7 +16,7 @@ public enum ErrorCode {
 
     // Menu
     MENU_NOT_FOUND(404, "존재하지 않는 메뉴입니다."),
-    MENU_ALREADY_DELETED(400, "이미 삭제된 메뉴입니다."),
+    MENU_ALREADY_DELETED(400, "삭제된 메뉴입니다."),
 
     // Order
     ORDER_NOT_FOUND(404, "존재하지 않는 주문입니다."),
