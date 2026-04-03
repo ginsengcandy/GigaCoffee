@@ -116,3 +116,78 @@ ${변수명:기본값}
 
 DB_PASSWORD와 JWT_SECRET은 기본값을 의도적으로 지정하지 않았습니다.
 값이 없으면 앱 기동이 실패하도록 강제함으로써 민감 정보가 누락된 채로 실행되는 상황을 방지합니다.
+
+## Git 브랜칭 전략
+
+### 브랜치 구성
+
+| 브랜치 | 역할 |
+|---|---|
+| main | 안정된 코드 유지. 직접 push 금지 |
+| develop | 기능 통합 브랜치 |
+| feature/* | 기능 단위 개발 |
+
+### PR 흐름
+
+```
+feature/* → develop (PR + Squash merge)
+develop   → main    (PR, 기능 완성 시)
+```
+
+### 네이밍 규칙
+
+```
+feature/menu-api
+feature/order-api
+feature/point-payment
+feature/point-charge
+feature/kafka-event
+feature/redis-cache
+```
+
+### 전략 선정 이유
+
+Git Flow의 전체 구조(main, develop, feature, release, hotfix)는 대형 팀 프로젝트에 적합하다.
+그러나 배포 단계가 없는 1인 프로젝트에서 release와 hotfix 브랜치까지 운영하는 것은 불필요한 오버헤드다.
+GitHub Flow는 구조가 단순하지만 개발 중인 코드와 안정된 코드가 분리되지 않아 관리가 어렵다.
+
+따라서 Git Flow에서 release와 hotfix를 제거한 단순화된 구조를 채택했다.
+main과 develop을 분리해 코드 안정성을 유지하면서, feature 브랜치 단위로 기능을 개발하고
+Squash merge로 develop에 통합해 커밋 히스토리를 간결하게 유지한다.
+
+## 커밋 컨벤션
+
+### 커밋 타입
+
+| 타입 | 설명 |
+|---|---|
+| feat | 새로운 기능 추가 |
+| fix | 버그 수정 |
+| refactor | 기능 변경 없는 코드 개선 |
+| test | 테스트 코드 추가 및 수정 |
+| docs | 문서 수정 |
+| chore | 빌드, 설정 파일 수정 |
+| style | 코드 포맷, 공백 등 스타일 수정 |
+
+### 커밋 메시지 구조
+타입: 제목 (50자 이내)
+본문 (선택)
+
+무엇을 왜 했는지 설명
+어떻게는 코드로 확인 가능하므로 생략 가능
+
+
+### 규칙
+
+- 타입은 영어, 제목은 한국어로 작성한다
+- 제목은 마침표 없이 50자 이내로 작성한다
+- 하나의 커밋에는 하나의 변경사항만 담는다
+- 본문이 필요한 경우 무엇을 왜 했는지 위주로 작성한다
+
+### 예시
+feat: 커피 메뉴 목록 조회 API 구현
+feat: 포인트 결제 API 구현
+분산 락(Redisson)으로 동시 결제 요청 방지
+트랜잭션 커밋 후 Kafka 이벤트 발행
+fix: 포인트 잔액 음수 허용 오류 수정
+chore: docker-compose MySQL 유저 추가
