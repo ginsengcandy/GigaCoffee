@@ -3,13 +3,20 @@ package com.example.gigacoffee.domain.point.service;
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
 import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.payment.PaymentGateway;
+import com.example.gigacoffee.common.payment.PaymentResult;
 import com.example.gigacoffee.domain.order.entity.Order;
 import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.order.repository.OrderRepository;
+import com.example.gigacoffee.domain.point.dto.PointChargeRequest;
+import com.example.gigacoffee.domain.point.dto.PointChargeResponse;
 import com.example.gigacoffee.domain.point.dto.PointPaymentResponse;
+import com.example.gigacoffee.domain.point.entity.PointCharge;
 import com.example.gigacoffee.domain.point.entity.PointPayment;
 import com.example.gigacoffee.domain.point.entity.UserPoint;
+import com.example.gigacoffee.domain.point.enums.PointChargeType;
 import com.example.gigacoffee.domain.point.producer.PaymentEventProducer;
+import com.example.gigacoffee.domain.point.repository.PointChargeRepository;
 import com.example.gigacoffee.domain.point.repository.PointPaymentRepository;
 import com.example.gigacoffee.domain.point.repository.UserPointRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +40,8 @@ public class PointService {
     private final OrderRepository orderRepository;
     private final RedissonClient redissonClient;
     private final PaymentEventProducer paymentEventProducer;
+    private final PaymentGateway paymentGateway;
+    private final PointChargeRepository pointChargeRepository;
 
     @Transactional
     public PointPaymentResponse makePayment(Long userId, Long orderId) {
@@ -95,5 +104,26 @@ public class PointService {
                 lock.unlock();
             }
         }
+    }
+
+    @Transactional
+    public PointChargeResponse charge(Long userId, PointChargeRequest request) {
+        // 1. Mock 결제 실행
+        PaymentResult result = paymentGateway.charge(request.getAmount());
+        if(!result.isSuccess()) {
+            throw new BusinessException(ErrorCode.PAYMENT_FAILED);
+        }
+
+        // 2. 충전 이력 저장
+        PointCharge pointCharge = PointCharge.create(userId, request.getAmount(), PointChargeType.CHARGE);
+        pointChargeRepository.save(pointCharge);
+
+        // 3. 잔액 업데이트 (낙관적 락)
+        UserPoint userPoint = userPointRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException((ErrorCode.POINT_NOT_FOUND)));
+        userPoint.charge(request.getAmount());
+        userPointRepository.save(userPoint);
+
+        return PointChargeResponse.of(userPoint, request.getAmount());
     }
 }
