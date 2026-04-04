@@ -1,13 +1,13 @@
 package com.example.gigacoffee.domain.point.producer;
 
 
-import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
-import static com.example.gigacoffee.common.model.kafka.topic.KafkaTopic.TOPIC_PAYMENT_CONFIRMED;
+import static com.example.gigacoffee.common.kafka.model.topic.KafkaTopic.TOPIC_PAYMENT_CONFIRMED;
 
 @Component
 @RequiredArgsConstructor
@@ -21,12 +21,12 @@ public class PaymentEventProducer {
                 .whenComplete((result, ex) -> {
                     if(ex != null) {
                         // 실패 처리
-                        log.error("[Kafka] 결제 이벤트 발행 실패 - userId = {}, menuIds =- {}",
-                                event.getUserId(), event.getMenuIds(), ex);
+                        log.error("[Kafka] 결제 이벤트 발행 실패 - userId = {}, menuQuantities = {}",
+                                event.getUserId(), event.getMenuQuantities(), ex);
                     } else {
                         // 성공 처리
-                        log.info("[Kafka] 결제 이벤트 발행 성공 - userId = {}, menuIds = {}",
-                                event.getUserId(), event.getMenuIds());
+                        log.info("[Kafka] 결제 이벤트 발행 성공 - userId = {}, menuQuantities = {}",
+                                event.getUserId(), event.getMenuQuantities());
                     }
                 });
     }

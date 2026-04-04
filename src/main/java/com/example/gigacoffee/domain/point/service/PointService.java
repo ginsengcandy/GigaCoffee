@@ -2,7 +2,7 @@ package com.example.gigacoffee.domain.point.service;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
-import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import com.example.gigacoffee.common.payment.PaymentGateway;
 import com.example.gigacoffee.common.payment.PaymentResult;
 import com.example.gigacoffee.domain.order.entity.Order;
@@ -79,8 +79,11 @@ public class PointService {
             order.complete();
 
             // 6. 트랜잭션 커밋 후 Kafka 이벤트 발행
-            List<Long> menuIds = order.getOrderMenus().stream()
-                    .map(orderMenu -> orderMenu.getMenu().getId())
+            List<PaymentConfirmedEvent.MenuQuantity> menuQuantities = order.getOrderMenus().stream()
+                    .map(orderMenu -> new PaymentConfirmedEvent.MenuQuantity(
+                            orderMenu.getMenu().getId(),
+                            orderMenu.getQuantity()
+                    ))
                     .toList();
 
             TransactionSynchronizationManager.registerSynchronization(
@@ -88,7 +91,7 @@ public class PointService {
                         @Override
                         public void afterCommit() {
                             paymentEventProducer.sendPaymentConfirmed(
-                                    new PaymentConfirmedEvent(userId, menuIds, order.getTotalPrice())
+                                    new PaymentConfirmedEvent(userId, menuQuantities, order.getTotalPrice())
                             );
                         }
                     }

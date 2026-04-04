@@ -428,6 +428,41 @@ Consumer가 재기동 후 다시 처리할 수 있다.
 트랜잭션 안에서 발행하면 DB 롤백 시 이벤트는 이미 나간 상태가 되어 데이터 불일치가 발생한다.
 TransactionSynchronizationManager의 afterCommit() 콜백을 사용해 커밋 완료 후에만 발행되도록 보장한다.
 
+## 기술적 판단: 테스트 환경 Redis 처리 전략
+
+### 결정
+
+테스트 환경에서 Redis 빈을 `@MockitoBean`으로 대체한다.
+
+### 배경
+
+`MenuRankingService`와 `MenuRankingConsumer`가 `StringRedisTemplate`을 주입받고,
+`PointService`가 `RedissonClient`를 주입받는다.
+테스트 `application.yaml`에서 Redis 관련 자동 구성을 exclude하면 두 빈이 컨텍스트에 등록되지 않아
+`contextLoads()`가 실패한다.
+
+### 두 가지 대안 비교
+
+| 방식 | application-test.yml에 Redis 설정 추가 | @MockitoBean으로 대체 |
+|---|---|---|
+| 인프라 의존 | 실제 Redis 또는 Testcontainers 필요 | 없음 |
+| CI 영향 | 별도 컨테이너 설정 필요 | 없음 |
+| 테스트 목적 부합 | contextLoads()는 빈 구성 확인용, Redis 동작 검증 불필요 | 충분 |
+| 기존 패턴 일관성 | RedissonClient는 이미 Mock으로 처리 중 | 동일 방식으로 통일 |
+
+### 적용
+
+```java
+@MockitoBean
+RedissonClient redissonClient;
+
+@MockitoBean
+StringRedisTemplate stringRedisTemplate;
+```
+
+`contextLoads()`는 Redis 동작을 검증하는 테스트가 아니므로 실제 빈이 불필요하다.
+Redis 실제 동작이 필요한 테스트는 별도로 분리해 작성한다.
+
 ## 기술적 판단: PointService 단위 테스트 설계
 
 ### 결정
@@ -487,3 +522,46 @@ doAnswer(inv -> { mutex.release(); return null; }).when(rLock).unlock();
 `MockitoExtension`의 strict stubbing은 이를 미사용 스텁으로 간주해 `UnnecessaryStubbingException`을 던진다.
 
 `lenient()`로 선언하면 호출 여부와 무관하게 스텁을 유지할 수 있어 비결정적 실행 순서에서도 테스트가 안정적으로 동작한다.
+
+## 기술적 판단: MenuRankingServiceTest — @BeforeEach 스텁과 UnnecessaryStubbingException
+
+### 문제
+
+`@BeforeEach`에 `opsForZSet()` 스텁을 등록했으나, Redis에 데이터가 없어 즉시 반환하는 테스트에서 `opsForZSet()`이 한 번도 호출되지 않아 `UnnecessaryStubbingException`이 발생했다.
+
+```java
+// getPopularMenus() 내부
+if (existingKeys.isEmpty()) {
+    return Collections.emptyList(); // opsForZSet()이 호출되기 전에 반환
+}
+```
+
+`@ExtendWith(MockitoExtension.class)`의 strict stubbing은 등록된 스텁이 한 번도 사용되지 않으면 예외를 던진다.
+
+### 두 가지 해결 방법 비교
+
+| | 각 테스트에 직접 추가 | @BeforeEach에서 lenient() 사용 |
+|---|---|---|
+| 코드량 | 예외 테스트 1개를 제외한 모든 테스트에 반복 추가 | @BeforeEach 1줄로 끝남 |
+| 명시성 | 각 테스트가 자기완결적 | 암묵적 |
+| strict stubbing 유지 | 완전히 유지 | 해당 스텁에 한해 완화 |
+
+### 결정
+
+`@BeforeEach`에서 `lenient()`로 선언한다.
+
+```java
+@BeforeEach
+void setUp() {
+    lenient().when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
+}
+```
+
+### 이유
+
+`opsForZSet()`은 "데이터 없음" 케이스를 제외한 모든 테스트에서 사용된다.
+12개 테스트에 동일한 한 줄을 반복 추가하는 것은 잡음만 늘릴 뿐이다.
+
+`lenient()`는 strict stubbing을 전면 해제하지 않는다.
+해당 스텁 하나에만 적용되므로, 나머지 스텁에 대한 `UnnecessaryStubbingException` 감지는 그대로 유지된다.
+이미 `PointServiceTest`에서도 동시성 테스트의 비결정적 스텁에 동일한 이유로 `lenient()`를 사용하고 있어 패턴이 일관된다.
