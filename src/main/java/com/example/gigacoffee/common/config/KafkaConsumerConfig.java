@@ -1,6 +1,6 @@
 package com.example.gigacoffee.common.config;
 
-import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +19,8 @@ import org.springframework.util.backoff.FixedBackOff;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.example.gigacoffee.common.model.kafka.consumerGroup.ConsumerGroup.DATA_PLATFORM_CONSUMER_GROUP;
+import static com.example.gigacoffee.common.kafka.model.consumerGroup.ConsumerGroup.DATA_PLATFORM_CONSUMER_GROUP;
+import static com.example.gigacoffee.common.kafka.model.consumerGroup.ConsumerGroup.MENU_RANKING_CONSUMER_GROUP;
 
 @Configuration
 public class KafkaConsumerConfig {
@@ -77,5 +78,17 @@ public class KafkaConsumerConfig {
             CommonErrorHandler commonErrorHandlerWithDLT
     ) {
         return baseKafkaListenerContainerFactory(paymentHistoryConsumerFactory(), commonErrorHandlerWithDLT);
+    }
+
+    @Bean
+    public ConsumerFactory<String, PaymentConfirmedEvent> menuRankingConsumerFactory() {
+        return buildConsumerFactory(MENU_RANKING_CONSUMER_GROUP);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, PaymentConfirmedEvent> menuRankingKafkaListenerContainerFactory(
+            CommonErrorHandler commonErrorHandlerWithDLT
+    ) {
+        return baseKafkaListenerContainerFactory(menuRankingConsumerFactory(), commonErrorHandlerWithDLT);
     }
 }

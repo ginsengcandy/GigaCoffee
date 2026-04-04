@@ -1,4 +1,4 @@
-package com.example.gigacoffee.common.model.kafka.event;
+package com.example.gigacoffee.common.kafka.model.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

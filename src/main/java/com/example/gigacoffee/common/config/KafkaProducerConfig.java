@@ -1,6 +1,6 @@
 package com.example.gigacoffee.common.config;
 
-import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;

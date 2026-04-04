@@ -1,13 +1,13 @@
 package com.example.gigacoffee.domain.point.producer;
 
 
-import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
-import static com.example.gigacoffee.common.model.kafka.topic.KafkaTopic.TOPIC_PAYMENT_CONFIRMED;
+import static com.example.gigacoffee.common.kafka.model.topic.KafkaTopic.TOPIC_PAYMENT_CONFIRMED;
 
 @Component
 @RequiredArgsConstructor

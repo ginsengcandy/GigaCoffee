@@ -2,7 +2,7 @@ package com.example.gigacoffee.domain.point.service;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
-import com.example.gigacoffee.common.model.kafka.event.PaymentConfirmedEvent;
+import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import com.example.gigacoffee.common.payment.PaymentGateway;
 import com.example.gigacoffee.common.payment.PaymentResult;
 import com.example.gigacoffee.domain.order.entity.Order;
