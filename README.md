@@ -192,6 +192,77 @@ feat: 포인트 결제 API 구현
 fix: 포인트 잔액 음수 허용 오류 수정
 chore: docker-compose MySQL 유저 추가
 
+## 정적 팩토리 메서드 네이밍 규칙
+
+### 규칙
+
+| 메서드 | 의미 | 사용 시점 |
+|---|---|---|
+| create | 새로운 객체 생성 | 도메인 엔티티를 새로 만들 때 |
+| from | 단일 객체 변환 | 다른 객체 하나를 받아서 변환할 때 |
+| of | 여러 값 조합 | 여러 파라미터를 받아서 생성할 때 |
+
+### 적용 예시
+
+엔티티 생성은 create로 통일한다.
+```java
+Order.create(userId, totalPrice)
+OrderMenu.create(order, menu, quantity)
+UserPoint.create(userId)
+PointCharge.create(userId, amount, type)
+PointPayment.create(userId, orderId, amount)
+Menu.create(name, price)
+```
+
+단일 객체를 DTO로 변환할 때는 from을 사용한다.
+```java
+MenuResponse.from(menu)
+OrderResponse.from(order)
+OrderMenuResponse.from(orderMenu)
+```
+
+여러 파라미터를 조합해서 DTO를 만들 때는 of를 사용한다.
+```java
+PointPaymentResponse.of(userPoint, paymentAmount)
+```
+
+### 근거
+
+메서드 이름만 봐도 객체가 어떤 방식으로 만들어지는지 의도를 파악할 수 있다.
+create, from, of는 Java 표준 라이브러리와 실무에서 널리 쓰이는 관례를 따른 것으로,
+팀원이 코드를 읽을 때 별도 설명 없이도 생성 방식을 이해할 수 있다.
+
+## Kafka 이벤트 발행 결과 처리 전략
+
+### 구현
+```java
+kafkaTemplate.send("payment.confirmed", event)
+    .whenComplete((result, ex) -> {
+        if (ex != null) {
+            log.error("[Kafka] 결제 이벤트 발행 실패 - userId: {}, menuIds: {}",
+                    event.getUserId(), event.getMenuIds(), ex);
+        } else {
+            log.info("[Kafka] 결제 이벤트 발행 성공 - userId: {}, menuIds: {}",
+                    event.getUserId(), event.getMenuIds());
+        }
+    });
+```
+
+### 이유
+
+`kafkaTemplate.send()`는 비동기로 동작하며 `CompletableFuture`를 반환한다.
+콜백 없이 `send()`만 호출하면 발행 성공 여부를 알 수 없고,
+브로커 연결 실패나 토픽 부재 같은 상황에서 이벤트가 유실돼도 감지할 수 없다.
+
+`.whenComplete()`로 콜백을 등록하면 발행 실패 시 로그를 남겨 추적할 수 있고,
+운영 환경에서 알림을 보내는 기반으로 활용할 수 있다.
+
+### 비동기로 처리하는 이유
+
+발행 결과를 동기로 기다리면 Kafka 브로커 응답 시간만큼 API 응답이 지연된다.
+결제 API에서 Kafka 응답을 기다리는 것은 불필요한 지연이므로,
+발행은 비동기로 하되 결과는 콜백으로 처리한다.
+
 ## 기술적 판단: Orders - Users 간 JPA 연관관계 미적용
 
 ### 결정
@@ -301,3 +372,118 @@ DTO에 `@Positive` 검증을 적용해 0 이하의 값을 차단한다.
 @Positive(message = "수량은 0보다 커야 합니다.")
 private int quantity;
 ```
+
+## 기술적 판단: 결제 이벤트 처리에 Kafka 도입
+
+### 결정
+
+결제 확정 이벤트 처리에 Spring 내부 이벤트 대신 Kafka를 사용한다.
+
+### 요구사항
+
+다중 서버 환경에서 다수의 인스턴스로 동작하더라도 기능에 문제가 없어야 한다.
+
+### Spring 내부 이벤트의 한계
+
+Spring 내부 이벤트는 같은 JVM 안에서만 동작한다.
+다중 서버 환경에서는 이벤트를 발행한 인스턴스에서만 처리가 일어나고,
+나머지 인스턴스는 이벤트를 받지 못한다.
+서버 A에서 결제 완료
+→ 서버 A의 내부 이벤트 발행
+→ 서버 A의 리스너만 처리
+→ 서버 B, C는 이벤트를 받지 못함
+
+인기 메뉴 랭킹 업데이트나 데이터 수집 플랫폼 전송이
+일부 인스턴스에서만 동작하는 상황이 발생할 수 있다.
+
+### Kafka를 선택한 근거
+
+첫째, 다중 서버 환경에서 이벤트 처리를 보장한다.
+Kafka 브로커가 이벤트를 중앙에서 관리하기 때문에
+어느 인스턴스에서 이벤트를 발행해도 Consumer Group이 항상 처리할 수 있다.
+서버 A, B, C 중 어느 서버에서 결제가 완료되든
+→ Kafka 브로커에 이벤트 발행
+→ Consumer Group이 브로커에서 이벤트를 가져가 처리
+→ 어느 인스턴스에서 발행했는지 무관하게 처리 보장
+
+둘째, 이벤트 유실을 방지한다.
+이벤트가 브로커에 저장되기 때문에 앱이 죽어도 유실되지 않고,
+Consumer가 재기동 후 다시 처리할 수 있다.
+
+셋째, 팬아웃 구조를 자연스럽게 지원한다.
+결제 확정 이벤트 하나에 인기 메뉴 랭킹 업데이트, 데이터 수집 플랫폼 전송 두 가지 처리가 필요한데,
+각각을 독립적인 Consumer Group으로 분리해 처리할 수 있다.
+
+넷째, 수평 확장이 용이하다.
+처리량이 늘어날 때 Consumer만 수평 확장하면 되는 구조다.
+
+### 트레이드오프
+
+별도 인프라(Kafka 브로커)가 필요하고 운영 복잡도가 올라간다.
+이벤트 처리 실패 시 재처리 전략을 직접 구현해야 한다.
+
+### 이벤트 발행 시점
+
+트랜잭션 커밋 이후에 이벤트를 발행한다.
+트랜잭션 안에서 발행하면 DB 롤백 시 이벤트는 이미 나간 상태가 되어 데이터 불일치가 발생한다.
+TransactionSynchronizationManager의 afterCommit() 콜백을 사용해 커밋 완료 후에만 발행되도록 보장한다.
+
+## 기술적 판단: PointService 단위 테스트 설계
+
+### 결정
+
+Repository와 RedissonClient를 Mockito로 모킹하고, `@ExtendWith(MockitoExtension.class)` 기반의 단위 테스트로 작성한다.
+
+### TransactionSynchronizationManager 정적 메서드 처리
+
+`makePayment()`의 성공 경로에는 `TransactionSynchronizationManager.registerSynchronization()`이 포함된다.
+이 메서드는 활성 트랜잭션이 없으면 `IllegalStateException`을 던지는데,
+`@ExtendWith(MockitoExtension.class)` 환경에서는 실제 트랜잭션이 존재하지 않는다.
+
+Mockito의 `mockStatic(TransactionSynchronizationManager.class)`로 정적 호출을 모킹해서 해결한다.
+Kafka 이벤트 발행 테스트에서는 `ArgumentCaptor`로 등록된 `TransactionSynchronization`을 캡처한 후
+`afterCommit()`을 직접 호출해 커밋 이후 이벤트 발행 여부를 검증한다.
+
+```java
+ArgumentCaptor<TransactionSynchronization> syncCaptor =
+        ArgumentCaptor.forClass(TransactionSynchronization.class);
+
+try (MockedStatic<TransactionSynchronizationManager> txManager =
+             mockStatic(TransactionSynchronizationManager.class)) {
+    pointService.makePayment(USER_ID, ORDER_ID);
+
+    txManager.verify(() ->
+            TransactionSynchronizationManager.registerSynchronization(syncCaptor.capture()));
+
+    syncCaptor.getValue().afterCommit(); // 커밋 후 이벤트 발행 트리거
+    verify(paymentEventProducer).sendPaymentConfirmed(any());
+}
+```
+
+### 동시성 테스트 전략
+
+동시성 케이스는 성격에 따라 모킹 방식을 다르게 적용한다.
+
+| 시나리오 | 전략 | 기대 결과 |
+|---|---|---|
+| 락 경쟁 | `AtomicBoolean.compareAndSet`으로 첫 번째 `tryLock`만 `true` 반환 | 1성공 + LOCK_ACQUISITION_FAILED |
+| 잔액 소진 | `Semaphore(1)`로 스레드가 순차적으로 임계 구역 진입 | 1성공 + INSUFFICIENT_POINT |
+
+잔액 소진 테스트에서 `Semaphore`를 쓰는 이유:
+두 스레드가 동시에 `UserPoint.deduct()`에 진입하면 비원자적 연산으로 인해 둘 다 잔액 체크를 통과할 수 있다.
+`Semaphore(1)`을 `tryLock` 응답에 연결하면 실제 분산락처럼 순차 진입을 보장해 테스트를 결정적으로 만든다.
+
+```java
+Semaphore mutex = new Semaphore(1);
+given(rLock.tryLock(anyLong(), anyLong(), any()))
+        .willAnswer(inv -> mutex.tryAcquire(3, TimeUnit.SECONDS));
+doAnswer(inv -> { mutex.release(); return null; }).when(rLock).unlock();
+```
+
+### lenient() 스텁 사용 이유
+
+동시성 테스트에서는 어느 스레드가 먼저 락을 획득하는지 비결정적이다.
+락 획득에 실패한 스레드는 즉시 예외를 던지고 이후 스텁(`orderRepository`, `userPointRepository` 등)을 호출하지 않는다.
+`MockitoExtension`의 strict stubbing은 이를 미사용 스텁으로 간주해 `UnnecessaryStubbingException`을 던진다.
+
+`lenient()`로 선언하면 호출 여부와 무관하게 스텁을 유지할 수 있어 비결정적 실행 순서에서도 테스트가 안정적으로 동작한다.

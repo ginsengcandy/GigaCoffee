@@ -22,6 +22,10 @@ public class UserPoint extends BaseEntity {
     private Long userId;
 
     @Column(nullable = false)
+    @Version
+    private Long version;
+
+    @Column(nullable = false)
     private Long pointBalance;
 
     public static UserPoint create(Long userId) {
