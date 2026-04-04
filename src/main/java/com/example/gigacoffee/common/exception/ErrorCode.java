@@ -30,6 +30,7 @@ public enum ErrorCode {
 
     //Payment
     PAYMENT_ALREADY_EXISTS(400, "이미 결제된 주문입니다."),
+    PAYMENT_FAILED(500, "결제 처리 중 오류가 발생했습니다."),
 
     // User
     USER_NOT_FOUND(404, "존재하지 않는 사용자입니다."),

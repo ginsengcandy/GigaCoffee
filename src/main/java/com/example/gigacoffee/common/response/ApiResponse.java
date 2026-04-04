@@ -1,8 +1,10 @@
 package com.example.gigacoffee.common.response;
 
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Getter;
 
 @Getter
+@JsonPropertyOrder({"success", "data", "message"})
 public class ApiResponse<T> {
 
     private final boolean success;
