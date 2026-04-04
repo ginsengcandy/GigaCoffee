@@ -12,6 +12,14 @@ import java.util.List;
 public class PaymentConfirmedEvent {
 
     private Long userId;
-    private List<Long> menuIds;
+    private List<MenuQuantity> menuQuantities;
     private Long paymentAmount;
+
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class MenuQuantity {
+        private Long menuId;
+        private int quantity;
+    }
 }

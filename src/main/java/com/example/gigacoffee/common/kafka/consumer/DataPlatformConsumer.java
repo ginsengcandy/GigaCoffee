@@ -20,7 +20,7 @@ public class DataPlatformConsumer {
     public void consume(PaymentConfirmedEvent event) {
         log.info("[Data-Platform] 결제 데이터 전송 - userId: {}, menuIds: {} - paymentAmount: {}",
                 event.getUserId(),
-                event.getMenuIds(),
+                event.getMenuQuantities(),
                 event.getPaymentAmount());
     }
 }

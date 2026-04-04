@@ -3,12 +3,14 @@ package com.example.gigacoffee.domain.menu.service;
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
 import com.example.gigacoffee.domain.menu.dto.MenuRankingResponse;
+import com.example.gigacoffee.domain.menu.entity.Menu;
 import com.example.gigacoffee.domain.menu.repository.MenuRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -63,11 +65,20 @@ public class MenuRankingService {
             return Collections.emptyList();
         }
 
-        // 5. 메뉴 조회
-        return menuIds.stream()
-                .map(id -> menuRepository.findById(Long.parseLong(id))
-                        .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND)))
-                .map(MenuRankingResponse::from)
-                .toList();
+        // 5. 메뉴 조회 (순위 포함)
+        List<String> menuIdList = new ArrayList<>(menuIds);
+        List<MenuRankingResponse> result = new ArrayList<>();
+
+        int rank = 1;
+        for (String menuId : menuIdList) {
+            Menu menu = menuRepository.findById(Long.parseLong(menuId))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));
+            if (menu.isDeleted()) {
+                continue;
+            }
+            result.add(MenuRankingResponse.of(rank++, menu));
+        }
+
+        return result;
     }
 }

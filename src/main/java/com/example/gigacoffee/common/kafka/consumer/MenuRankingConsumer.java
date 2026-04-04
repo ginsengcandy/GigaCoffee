@@ -30,12 +30,16 @@ public class MenuRankingConsumer {
     public void consume(PaymentConfirmedEvent event) {
         String todayKey = MENU_RANKING_PREFIX + LocalDate.now();
 
-        event.getMenuIds().forEach(menuId ->
-                redisTemplate.opsForZSet().incrementScore(todayKey, menuId.toString(), 1)
+        event.getMenuQuantities().forEach(menuQuantity ->
+                redisTemplate.opsForZSet().incrementScore(
+                        todayKey,
+                        menuQuantity.getMenuId().toString(),
+                        menuQuantity.getQuantity()
+                )
         );
 
         redisTemplate.expire(todayKey, TTL_DAYS, TimeUnit.DAYS);
 
-        log.info("[MenuRanking] 인기 메뉴 랭킹 업데이트 - menuIds: {}", event.getMenuIds());
+        log.info("[MenuRanking] 인기 메뉴 랭킹 업데이트 - menuQuantities: {}", event.getMenuQuantities());
     }
 }
