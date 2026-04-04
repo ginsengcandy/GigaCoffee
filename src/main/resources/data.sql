@@ -1,3 +1,10 @@
+-- 테스트용 유저 등록
+-- 비밀번호: password (BCrypt, cost=10)
+INSERT INTO users (email, password, name, role, deleted, created_at, updated_at)
+VALUES
+    ('user@test.com',  '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', '일반유저', 'USER',  false, NOW(), NOW()),
+    ('admin@test.com', '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', '관리자',   'ADMIN', false, NOW(), NOW());
+
 -- 메뉴 등록
 INSERT INTO menus (name, price, deleted, created_at, updated_at)
 VALUES
