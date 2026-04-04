@@ -565,3 +565,61 @@ void setUp() {
 `lenient()`는 strict stubbing을 전면 해제하지 않는다.
 해당 스텁 하나에만 적용되므로, 나머지 스텁에 대한 `UnnecessaryStubbingException` 감지는 그대로 유지된다.
 이미 `PointServiceTest`에서도 동시성 테스트의 비결정적 스텁에 동일한 이유로 `lenient()`를 사용하고 있어 패턴이 일관된다.
+
+## 기술적 판단: MenuResponse 역직렬화 전략 (@JsonCreator)
+
+### 문제
+
+Redis 캐시에서 꺼낸 JSON을 `MenuResponse`로 역직렬화할 때 아래 오류가 발생했다.
+Cannot construct instance of MenuResponse
+(no Creators, like default constructor, exist)
+
+`MenuResponse`는 정적 팩토리 메서드 `from()`으로만 생성하도록 설계돼 있어
+기본 생성자가 없고, Jackson이 역직렬화할 방법을 찾지 못한 것이다.
+
+### 선택지 비교
+
+| | @NoArgsConstructor | @JsonCreator |
+|---|---|---|
+| 불변성 | 깨짐 (final 제거 필요) | 유지 |
+| 생성 방식 통제 | 빈 객체 생성 가능 | private 생성자로 통제 |
+| 코드 복잡도 | 낮음 | 높음 |
+| 설계 일관성 | 정적 팩토리 메서드 의미 퇴색 | 유지 |
+
+### 결정
+
+`@JsonCreator`를 사용해 불변성과 생성 방식 통제를 유지한다.
+```java
+@Getter
+public class MenuResponse {
+
+    private final Long id;
+    private final String name;
+    private final Long price;
+
+    @JsonCreator
+    private MenuResponse(
+            @JsonProperty("id") Long id,
+            @JsonProperty("name") String name,
+            @JsonProperty("price") Long price) {
+        this.id = id;
+        this.name = name;
+        this.price = price;
+    }
+
+    public static MenuResponse from(Menu menu) {
+        return new MenuResponse(menu.getId(), menu.getName(), menu.getPrice());
+    }
+}
+```
+
+### 근거
+
+`MenuResponse`는 DB에서 읽어온 데이터를 클라이언트에 전달하는 DTO다.
+한 번 생성된 뒤 값이 바뀔 이유가 없으므로 불변성을 지키는 것이 맞다.
+
+`@NoArgsConstructor`를 추가하면 `final`을 제거해야 하고,
+빈 객체 생성이 가능해져 정적 팩토리 메서드로 생성 방식을 통제하려는 설계 의도가 퇴색된다.
+
+`@JsonCreator`는 Jackson에게 역직렬화 시 사용할 생성자를 명시적으로 지정하는 방식으로,
+불변성과 생성 방식 통제를 유지하면서 역직렬화 문제를 해결한다.
