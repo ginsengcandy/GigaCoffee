@@ -122,6 +122,7 @@ public class PointService {
         UserPoint userPoint = userPointRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException((ErrorCode.POINT_NOT_FOUND)));
         userPoint.charge(request.getAmount());
+        userPointRepository.save(userPoint);
 
         return PointChargeResponse.of(userPoint, request.getAmount());
     }
