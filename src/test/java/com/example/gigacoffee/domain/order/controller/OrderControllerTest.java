@@ -40,11 +40,16 @@ class OrderControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    // ========================
+    // 정상 케이스
+    // ========================
+
     @Test
-    @DisplayName("정상 주문 생성 - 200 OK와 주문 정보를 반환한다")
+    @DisplayName("정상 주문 생성 시 200과 orderId, orderStatus(PENDING), orderMenus, totalPrice를 반환한다")
     void createOrder_success() throws Exception {
         // given
         Order order = Order.create(1L, 9000L);
+        ReflectionTestUtils.setField(order, "id", 1L);
         Menu menu = Menu.create("아메리카노", 4500L);
         order.getOrderMenus().add(OrderMenu.create(order, menu, 2));
         OrderResponse mockResponse = OrderResponse.from(order);
@@ -59,11 +64,76 @@ class OrderControllerTest {
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.totalPrice").value(9000))
+                .andExpect(jsonPath("$.data.orderId").value(1))
                 .andExpect(jsonPath("$.data.orderStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.orderMenus").isArray())
                 .andExpect(jsonPath("$.data.orderMenus[0].menuName").value("아메리카노"))
-                .andExpect(jsonPath("$.data.orderMenus[0].subtotalPrice").value(9000));
+                .andExpect(jsonPath("$.data.totalPrice").value(9000));
     }
+
+    // ========================
+    // 유효성 검증
+    // ========================
+
+    @Test
+    @DisplayName("빈 orderMenus 요청 시 400을 반환한다")
+    void createOrder_emptyOrderMenus_returns400() throws Exception {
+        // given
+        String body = objectMapper.writeValueAsString(orderRequest(List.of()));
+
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("menuId 없이 요청 시 400을 반환한다")
+    void createOrder_noMenuId_returns400() throws Exception {
+        // given
+        String body = objectMapper.writeValueAsString(orderRequest(List.of(orderMenuRequest(null, 1))));
+
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("quantity가 0이면 400을 반환한다")
+    void createOrder_quantityZero_returns400() throws Exception {
+        // given
+        String body = objectMapper.writeValueAsString(orderRequest(List.of(orderMenuRequest(1L, 0))));
+
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("quantity가 음수이면 400을 반환한다")
+    void createOrder_quantityNegative_returns400() throws Exception {
+        // given
+        String body = objectMapper.writeValueAsString(orderRequest(List.of(orderMenuRequest(1L, -1))));
+
+        // when & then
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    // ========================
+    // 예외 케이스
+    // ========================
 
     @Test
     @DisplayName("존재하지 않는 메뉴 주문 시 404를 반환한다")
@@ -101,19 +171,9 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.message").value(ErrorCode.MENU_ALREADY_DELETED.getMessage()));
     }
 
-    @Test
-    @DisplayName("주문 목록이 비어 있으면 400을 반환한다")
-    void createOrder_emptyOrderMenus_returns400() throws Exception {
-        // given
-        String body = objectMapper.writeValueAsString(orderRequest(List.of()));
-
-        // when & then
-        mockMvc.perform(post("/api/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
+    // ========================
+    // 헬퍼 메서드
+    // ========================
 
     private OrderMenuRequest orderMenuRequest(Long menuId, int quantity) {
         OrderMenuRequest req = new OrderMenuRequest();
