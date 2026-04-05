@@ -91,7 +91,7 @@ class OrderControllerTest {
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.orderId").value(1))
+                .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.orderStatus").value("PENDING"))
                 .andExpect(jsonPath("$.data.orderMenus").isArray())
                 .andExpect(jsonPath("$.data.orderMenus[0].menuName").value("아메리카노"))

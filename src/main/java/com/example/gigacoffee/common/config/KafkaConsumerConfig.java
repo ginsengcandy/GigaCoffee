@@ -19,8 +19,7 @@ import org.springframework.util.backoff.FixedBackOff;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.example.gigacoffee.common.kafka.model.consumerGroup.ConsumerGroup.DATA_PLATFORM_CONSUMER_GROUP;
-import static com.example.gigacoffee.common.kafka.model.consumerGroup.ConsumerGroup.MENU_RANKING_CONSUMER_GROUP;
+import static com.example.gigacoffee.common.kafka.model.consumerGroup.ConsumerGroup.*;
 
 @Configuration
 public class KafkaConsumerConfig {
@@ -90,5 +89,16 @@ public class KafkaConsumerConfig {
             CommonErrorHandler commonErrorHandlerWithDLT
     ) {
         return baseKafkaListenerContainerFactory(menuRankingConsumerFactory(), commonErrorHandlerWithDLT);
+    }
+
+    @Bean
+    public ConsumerFactory<String, PaymentConfirmedEvent> recentOrderConsumerFactory() {
+        return buildConsumerFactory(RECENT_ORDER_CONSUMER_GROUP);
+    }
+
+    @Bean ConcurrentKafkaListenerContainerFactory<String, PaymentConfirmedEvent> recentOrderKafkaListenerContainerFactory(
+            CommonErrorHandler commonErrorHandlerWithDLT
+    ) {
+        return baseKafkaListenerContainerFactory(recentOrderConsumerFactory(), commonErrorHandlerWithDLT);
     }
 }
