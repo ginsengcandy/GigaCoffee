@@ -7,6 +7,7 @@ import com.example.gigacoffee.domain.menu.repository.MenuRepository;
 import com.example.gigacoffee.domain.order.dto.OrderRequest;
 import com.example.gigacoffee.domain.order.dto.OrderResponse;
 import com.example.gigacoffee.domain.order.entity.Order;
+import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.order.repository.OrderRepository;
 import com.example.gigacoffee.domain.orderMenu.dto.OrderMenuRequest;
 import com.example.gigacoffee.domain.orderMenu.entity.OrderMenu;
@@ -22,13 +23,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static com.example.gigacoffee.common.kafka.model.RedisKey.RECENT_ORDER_PREFIX;
+import static com.example.gigacoffee.domain.order.enums.OrderStatus.COMPLETED;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 @Transactional(readOnly = true)
 public class OrderService {
 
-    private static final String RECENT_ORDER_KEY_PREFIX = "orders:recent:";
     private static final long CACHE_TTL_HOURS = 1;
     private final OrderRepository orderRepository;
     private final MenuRepository menuRepository;
@@ -69,7 +72,7 @@ public class OrderService {
     }
 
     public List<OrderResponse> getRecentOrders(Long userId) {
-        String key = "orders:recent:" + userId;
+        String key = RECENT_ORDER_PREFIX + userId;
 
         // 1. 캐시 조회
         List<String> cached = redisTemplate.opsForList().range(key, 0, 4);
@@ -90,7 +93,7 @@ public class OrderService {
         // 2. 캐시 미스 -> DB 조회
         log.info("[Cache] 캐시 미스 - key: {}", key);
         List<Order> orders = orderRepository
-                .findTop5ByUserIdOrderByCreatedAtDesc(userId);
+                .findTop5ByUserIdAndOrderStatusOrderByCreatedAtDesc(userId, OrderStatus.COMPLETED);
         List<OrderResponse> result =  orders.stream()
                 .map(OrderResponse::from)
                 .toList();
