@@ -11,6 +11,14 @@ import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.order.repository.OrderRepository;
 import com.example.gigacoffee.domain.orderMenu.dto.OrderMenuRequest;
 import com.example.gigacoffee.domain.orderMenu.entity.OrderMenu;
+import com.example.gigacoffee.domain.point.entity.PointCharge;
+import com.example.gigacoffee.domain.point.entity.PointPayment;
+import com.example.gigacoffee.domain.point.entity.UserPoint;
+import com.example.gigacoffee.domain.point.enums.PointChargeType;
+import com.example.gigacoffee.domain.point.repository.PointChargeRepository;
+import com.example.gigacoffee.domain.point.repository.PointPaymentRepository;
+import com.example.gigacoffee.domain.point.repository.UserPointRepository;
+import com.example.gigacoffee.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,7 +32,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static com.example.gigacoffee.common.kafka.model.RedisKey.RECENT_ORDER_PREFIX;
-import static com.example.gigacoffee.domain.order.enums.OrderStatus.COMPLETED;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +44,10 @@ public class OrderService {
     private final MenuRepository menuRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
+    private final PointPaymentRepository pointPaymentRepository;
+    private final PointChargeRepository pointChargeRepository;
+    private final UserPointRepository userPointRepository;
 
     @Transactional
     public OrderResponse createOrder(Long userId, OrderRequest request) {
@@ -109,5 +120,36 @@ public class OrderService {
             log.error("[Cache] 캐시 직렬화 실패 - key: {}", key, e);
         }
         return result;
+    }
+
+    @Transactional
+    public void cancelOrder(Long userId, Long orderId) {
+
+        // 1. 주문 조회
+        Order order = orderRepository.findById(orderId).orElseThrow(
+                () -> new BusinessException(ErrorCode.ORDER_NOT_FOUND)
+        );
+
+        // 2. 본인 주문 검증
+        if (!order.getUserId().equals(userId)) throw new BusinessException(ErrorCode.FORBIDDEN);
+
+        // 3. 주문 취소 (검증은 엔티티 내부에서)
+        order.cancel();
+
+        // 4. 결제 이력에서 환불 금액 조회
+        PointPayment pointPayment = pointPaymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        // 5. 환불 이력 저장
+        PointCharge refund = PointCharge.create(userId, pointPayment.getPaymentAmount(), PointChargeType.REFUND);
+        pointChargeRepository.save(refund);
+
+        // 6. 포인트 잔액 복구
+        UserPoint userPoint = userPointRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        userPoint.charge(pointPayment.getPaymentAmount());
+
+        // 7. 최근 주문 캐시 무효화
+        redisTemplate.delete(RECENT_ORDER_PREFIX + userId);
     }
 }
