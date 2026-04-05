@@ -146,7 +146,7 @@ public class OrderService {
 
         // 6. 포인트 잔액 복구
         UserPoint userPoint = userPointRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.POINT_NOT_FOUND));
         userPoint.charge(pointPayment.getPaymentAmount());
 
         // 7. 최근 주문 캐시 무효화
