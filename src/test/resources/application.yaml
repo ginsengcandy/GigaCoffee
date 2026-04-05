@@ -31,5 +31,5 @@ spring:
       - org.redisson.spring.starter.RedissonAutoConfigurationV4
 
 jwt:
-  secret: test-secret-key-for-testing-purposes-only-at-least-32-chars
+  secret: VtHcoEqCTwJ981b7wHL5yb57mwhlE8UjzYhFu3vd5M1
   expiration: 86400000

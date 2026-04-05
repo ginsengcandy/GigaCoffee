@@ -2,6 +2,7 @@ package com.example.gigacoffee.domain.order.controller;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
+import com.example.gigacoffee.common.security.JwtProvider;
 import com.example.gigacoffee.domain.menu.entity.Menu;
 import com.example.gigacoffee.domain.order.dto.OrderRequest;
 import com.example.gigacoffee.domain.order.dto.OrderResponse;
@@ -9,11 +10,18 @@ import com.example.gigacoffee.domain.order.entity.Order;
 import com.example.gigacoffee.domain.order.service.OrderService;
 import com.example.gigacoffee.domain.orderMenu.dto.OrderMenuRequest;
 import com.example.gigacoffee.domain.orderMenu.entity.OrderMenu;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrderController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class OrderControllerTest {
 
     @Autowired
@@ -37,8 +46,25 @@ class OrderControllerTest {
     @MockitoBean
     private OrderService orderService;
 
+    @MockitoBean
+    private JwtProvider jwtProvider;
+
+    @MockitoBean
+    private StringRedisTemplate redisTemplate;
+
     @Autowired
     private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setAuth() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(1L, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+    }
+
+    @AfterEach
+    void clearAuth() {
+        SecurityContextHolder.clearContext();
+    }
 
     // ========================
     // 정상 케이스
@@ -60,6 +86,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -83,6 +110,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -97,6 +125,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -111,6 +140,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -125,6 +155,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -146,6 +177,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -164,6 +196,7 @@ class OrderControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/orders")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())

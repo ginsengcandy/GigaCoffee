@@ -34,7 +34,13 @@ public enum ErrorCode {
 
     // User
     USER_NOT_FOUND(404, "존재하지 않는 사용자입니다."),
-    USER_ALREADY_DELETED(400, "이미 탈퇴한 사용자입니다.");
+    USER_ALREADY_DELETED(400, "이미 탈퇴한 사용자입니다."),
+    EMAIL_ALREADY_EXISTS(400, "이미 사용 중인 이메일입니다."),
+    PASSWORD_MISMATCH(401, "이메일 또는 비밀번호가 올바르지 않습니다."),
+
+    // Token
+    TOKEN_EXPIRED(401, "만료된 토큰입니다."),
+    TOKEN_INVALID(401, "유효하지 않은 토큰입니다.");
 
     private final int status;
     private final String message;

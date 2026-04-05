@@ -2,20 +2,30 @@ package com.example.gigacoffee.domain.point.controller;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
+import com.example.gigacoffee.common.security.JwtProvider;
 import com.example.gigacoffee.domain.point.dto.PointChargeRequest;
 import com.example.gigacoffee.domain.point.dto.PointChargeResponse;
 import com.example.gigacoffee.domain.point.dto.PointPaymentResponse;
 import com.example.gigacoffee.domain.point.entity.UserPoint;
 import com.example.gigacoffee.domain.point.service.PointService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
+
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -25,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(PointController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class PointControllerTest {
 
     @Autowired
@@ -33,8 +44,25 @@ class PointControllerTest {
     @MockitoBean
     private PointService pointService;
 
+    @MockitoBean
+    private JwtProvider jwtProvider;
+
+    @MockitoBean
+    private StringRedisTemplate redisTemplate;
+
     @Autowired
     private ObjectMapper objectMapper;
+
+    @BeforeEach
+    void setAuth() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(1L, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+    }
+
+    @AfterEach
+    void clearAuth() {
+        SecurityContextHolder.clearContext();
+    }
 
     // ========================
     // 정상 케이스
@@ -51,7 +79,8 @@ class PointControllerTest {
         given(pointService.makePayment(eq(1L), eq(1L))).willReturn(mockResponse);
 
         // when & then
-        mockMvc.perform(post("/api/orders/1/payment"))
+        mockMvc.perform(post("/api/orders/1/payment")
+)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.pointBalance").value(5500))
@@ -70,7 +99,8 @@ class PointControllerTest {
                 .willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         // when & then
-        mockMvc.perform(post("/api/orders/999/payment"))
+        mockMvc.perform(post("/api/orders/999/payment")
+)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value(ErrorCode.ORDER_NOT_FOUND.getMessage()));
@@ -84,7 +114,8 @@ class PointControllerTest {
                 .willThrow(new BusinessException(ErrorCode.INSUFFICIENT_POINT));
 
         // when & then
-        mockMvc.perform(post("/api/orders/1/payment"))
+        mockMvc.perform(post("/api/orders/1/payment")
+)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value(ErrorCode.INSUFFICIENT_POINT.getMessage()));
@@ -98,7 +129,8 @@ class PointControllerTest {
                 .willThrow(new BusinessException(ErrorCode.ORDER_ALREADY_COMPLETED));
 
         // when & then
-        mockMvc.perform(post("/api/orders/1/payment"))
+        mockMvc.perform(post("/api/orders/1/payment")
+)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value(ErrorCode.ORDER_ALREADY_COMPLETED.getMessage()));
@@ -122,6 +154,7 @@ class PointControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/points/charge")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -142,6 +175,7 @@ class PointControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/points/charge")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -156,6 +190,7 @@ class PointControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/points/charge")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -170,6 +205,7 @@ class PointControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/points/charge")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -191,6 +227,7 @@ class PointControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/points/charge")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -209,6 +246,7 @@ class PointControllerTest {
 
         // when & then
         mockMvc.perform(post("/api/points/charge")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isInternalServerError())
