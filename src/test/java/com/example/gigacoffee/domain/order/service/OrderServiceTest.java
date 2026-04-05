@@ -10,6 +10,15 @@ import com.example.gigacoffee.domain.order.entity.Order;
 import com.example.gigacoffee.domain.order.enums.OrderStatus;
 import com.example.gigacoffee.domain.order.repository.OrderRepository;
 import com.example.gigacoffee.domain.orderMenu.dto.OrderMenuRequest;
+import com.example.gigacoffee.domain.point.entity.PointCharge;
+import com.example.gigacoffee.domain.point.entity.PointPayment;
+import com.example.gigacoffee.domain.point.entity.UserPoint;
+import com.example.gigacoffee.domain.point.enums.PointChargeType;
+import com.example.gigacoffee.domain.point.repository.PointChargeRepository;
+import com.example.gigacoffee.domain.point.repository.PointPaymentRepository;
+import com.example.gigacoffee.domain.point.repository.UserPointRepository;
+import com.example.gigacoffee.domain.user.repository.UserRepository;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,6 +46,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,6 +57,10 @@ class OrderServiceTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ObjectMapper objectMapper;
     @Mock private ListOperations<String, String> listOps;
+    @Mock private UserRepository userRepository;
+    @Mock private PointPaymentRepository pointPaymentRepository;
+    @Mock private PointChargeRepository pointChargeRepository;
+    @Mock private UserPointRepository userPointRepository;
 
     @InjectMocks
     private OrderService orderService;
@@ -441,6 +455,227 @@ class OrderServiceTest {
     }
 
     // ========================
+    // 주문 취소 - 정상 케이스
+    // ========================
+
+    @Test
+    @DisplayName("취소 성공 시 order.cancel()이 호출된다")
+    void cancelOrder_success_orderCancelCalled() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPointOf(0L)));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("취소 성공 시 REFUND 타입 PointCharge가 저장된다")
+    void cancelOrder_success_refundChargeSaved() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPointOf(0L)));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        ArgumentCaptor<PointCharge> captor = ArgumentCaptor.forClass(PointCharge.class);
+        verify(pointChargeRepository).save(captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(PointChargeType.REFUND);
+    }
+
+    @Test
+    @DisplayName("취소 성공 시 포인트 잔액이 환불 금액만큼 복구된다")
+    void cancelOrder_success_pointBalanceRestored() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        UserPoint userPoint = userPointOf(1000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPoint));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        assertThat(userPoint.getPointBalance()).isEqualTo(10000L);
+    }
+
+    @Test
+    @DisplayName("취소 성공 시 최근 주문 캐시가 삭제된다")
+    void cancelOrder_success_recentOrderCacheInvalidated() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPointOf(0L)));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        verify(redisTemplate).delete("orders:recent:" + USER_ID);
+    }
+
+    // ========================
+    // 주문 취소 - 예외 케이스
+    // ========================
+
+    @Test
+    @DisplayName("존재하지 않는 주문 취소 시 ORDER_NOT_FOUND 예외를 던진다")
+    void cancelOrder_orderNotFound() {
+        // given
+        given(orderRepository.findById(999L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> orderService.cancelOrder(USER_ID, 999L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.ORDER_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("본인 주문이 아닐 때 FORBIDDEN 예외를 던진다")
+    void cancelOrder_notOwner_forbidden() {
+        // given
+        Long otherUserId = 2L;
+        Order order = completedOrderOf(1L, otherUserId, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+
+        // when & then
+        assertThatThrownBy(() -> orderService.cancelOrder(USER_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.FORBIDDEN));
+    }
+
+    @Test
+    @DisplayName("PENDING 상태 주문 취소 시 ORDER_NOT_CANCELLABLE 예외를 던진다")
+    void cancelOrder_pendingOrder_notCancellable() {
+        // given
+        Order order = Order.create(USER_ID, 9000L);
+        ReflectionTestUtils.setField(order, "id", 1L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+
+        // when & then
+        assertThatThrownBy(() -> orderService.cancelOrder(USER_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.ORDER_NOT_CANCELLABLE));
+    }
+
+    @Test
+    @DisplayName("이미 CANCELLED 상태인 주문 취소 시 ORDER_NOT_CANCELLABLE 예외를 던진다")
+    void cancelOrder_cancelledOrder_notCancellable() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        order.cancel();
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+
+        // when & then
+        assertThatThrownBy(() -> orderService.cancelOrder(USER_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.ORDER_NOT_CANCELLABLE));
+    }
+
+    @Test
+    @DisplayName("결제 이력이 없을 때 PAYMENT_NOT_FOUND 예외를 던진다")
+    void cancelOrder_paymentNotFound() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> orderService.cancelOrder(USER_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("포인트 정보가 없을 때 POINT_NOT_FOUND 예외를 던진다")
+    void cancelOrder_pointNotFound() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> orderService.cancelOrder(USER_ID, 1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.POINT_NOT_FOUND));
+    }
+
+    // ========================
+    // 주문 취소 - 검증 케이스
+    // ========================
+
+    @Test
+    @DisplayName("캐시 삭제 키가 orders:recent:{userId} 형식이다")
+    void cancelOrder_cacheKeyFormat() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPointOf(0L)));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        verify(redisTemplate).delete("orders:recent:1");
+    }
+
+    @Test
+    @DisplayName("환불 금액은 PointPayment의 paymentAmount와 같다")
+    void cancelOrder_refundAmountFromPointPayment() {
+        // given
+        long paymentAmount = 12000L;
+        Order order = completedOrderOf(1L, USER_ID, paymentAmount);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, paymentAmount)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPointOf(0L)));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        ArgumentCaptor<PointCharge> captor = ArgumentCaptor.forClass(PointCharge.class);
+        verify(pointChargeRepository).save(captor.capture());
+        assertThat(captor.getValue().getChargeAmount()).isEqualTo(paymentAmount);
+    }
+
+    @Test
+    @DisplayName("저장되는 PointCharge의 type이 REFUND다")
+    void cancelOrder_refundTypeIsRefund() {
+        // given
+        Order order = completedOrderOf(1L, USER_ID, 9000L);
+        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(pointPaymentRepository.findByOrderId(1L)).willReturn(Optional.of(pointPaymentOf(1L, 9000L)));
+        given(userPointRepository.findByUserId(USER_ID)).willReturn(Optional.of(userPointOf(0L)));
+
+        // when
+        orderService.cancelOrder(USER_ID, 1L);
+
+        // then
+        ArgumentCaptor<PointCharge> captor = ArgumentCaptor.forClass(PointCharge.class);
+        verify(pointChargeRepository).save(captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(PointChargeType.REFUND);
+    }
+
+    // ========================
     // 헬퍼 메서드
     // ========================
 
@@ -453,6 +688,18 @@ class OrderServiceTest {
 
     private OrderResponse completedOrderResponseOf(Long id, Long userId, Long totalPrice) {
         return OrderResponse.from(completedOrderOf(id, userId, totalPrice));
+    }
+
+    private PointPayment pointPaymentOf(Long orderId, Long amount) {
+        PointPayment p = PointPayment.create(USER_ID, orderId, amount);
+        ReflectionTestUtils.setField(p, "id", 1L);
+        return p;
+    }
+
+    private UserPoint userPointOf(Long balance) {
+        UserPoint up = UserPoint.create(USER_ID);
+        ReflectionTestUtils.setField(up, "pointBalance", balance);
+        return up;
     }
 
     private OrderMenuRequest orderMenuRequest(Long menuId, int quantity) {

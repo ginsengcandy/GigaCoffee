@@ -34,4 +34,11 @@ public class OrderController {
         Long userId = SecurityUtils.getCurrentUserId();
         return ResponseEntity.ok(ApiResponse.ok(orderService.getRecentOrders(userId)));
     }
+
+    @DeleteMapping("/{orderId}")
+    public ResponseEntity<ApiResponse<Void>> cancelOrder(@PathVariable Long orderId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        orderService.cancelOrder(userId, orderId);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
 }

@@ -16,5 +16,6 @@ VALUES
 
 -- 테스트용 유저 포인트 등록(userId = 1)
 INSERT INTO user_points (user_id, point_balance, version, created_at, updated_at)
-VALUES (1, 300000, 0, NOW(), NOW()),
-VALUES (2, 300000, 0, NOW(), NOW());
+VALUES
+    (1, 300000, 0, NOW(), NOW()),
+    (2, 300000, 0, NOW(), NOW());
