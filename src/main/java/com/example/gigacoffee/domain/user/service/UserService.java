@@ -3,6 +3,8 @@ package com.example.gigacoffee.domain.user.service;
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
 import com.example.gigacoffee.common.security.JwtProvider;
+import com.example.gigacoffee.domain.point.entity.UserPoint;
+import com.example.gigacoffee.domain.point.repository.UserPointRepository;
 import com.example.gigacoffee.domain.user.dto.LoginRequest;
 import com.example.gigacoffee.domain.user.dto.LoginResponse;
 import com.example.gigacoffee.domain.user.dto.SignupRequest;
@@ -28,14 +30,21 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final StringRedisTemplate redisTemplate;
+    private final UserPointRepository userPointRepository;
 
     @Transactional
     public SignupResponse signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
+        // 1. 유저 생성
         User user = User.create(request.getEmail(), passwordEncoder.encode(request.getPassword()), request.getName());
         userRepository.save(user);
+
+        // 2. 포인트 잔액 초기화
+        UserPoint userPoint = UserPoint.create(user.getId());
+        userPointRepository.save(userPoint);
+
         return SignupResponse.from(user);
     }
 
