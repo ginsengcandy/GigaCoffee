@@ -2,6 +2,7 @@ package com.example.gigacoffee.domain.menu.controller;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
+import com.example.gigacoffee.common.security.JwtProvider;
 import com.example.gigacoffee.domain.menu.dto.MenuRankingResponse;
 import com.example.gigacoffee.domain.menu.entity.Menu;
 import com.example.gigacoffee.domain.menu.service.MenuRankingService;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,6 +31,12 @@ class MenuRankingControllerTest {
 
     @MockitoBean
     private MenuRankingService menuRankingService;
+
+    @MockitoBean
+    private JwtProvider jwtProvider;
+
+    @MockitoBean
+    private StringRedisTemplate redisTemplate;
 
     // ============================================================
     // 정상 케이스
