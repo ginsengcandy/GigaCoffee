@@ -59,6 +59,8 @@ class PointServiceTest {
     @InjectMocks
     private PointService pointService;
 
+    private PointPaymentExecutor pointPaymentExecutor;
+
     private static final Long USER_ID = 1L;
     private static final Long ORDER_ID = 1L;
     private static final Long PRICE = 5000L;
@@ -69,6 +71,10 @@ class PointServiceTest {
         lenient().doReturn(rLock).when(redissonClient).getLock(anyString());
         lenient().doReturn(true).when(rLock).tryLock(anyLong(), anyLong(), any());
         lenient().doReturn(true).when(rLock).isHeldByCurrentThread();
+
+        pointPaymentExecutor = new PointPaymentExecutor(
+                userPointRepository, pointPaymentRepository, orderRepository, paymentEventProducer);
+        ReflectionTestUtils.setField(pointService, "pointPaymentExecutor", pointPaymentExecutor);
     }
 
     // ============================================================
