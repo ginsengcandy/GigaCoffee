@@ -20,6 +20,9 @@ repositories {
 
 dependencies {
 
+    // Testcontainers BOM
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.3')
+
     // Actuator
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
@@ -51,7 +54,7 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
 
     // Retry
-    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.retry:spring-retry:2.0.9'
 
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
