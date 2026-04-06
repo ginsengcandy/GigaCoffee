@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import static com.example.gigacoffee.common.kafka.model.RedisKey.RECENT_ORDER_PREFIX;
 import static com.example.gigacoffee.common.kafka.model.consumerGroup.ConsumerGroup.RECENT_ORDER_CONSUMER_GROUP;
+import static com.example.gigacoffee.common.kafka.model.topic.KafkaTopic.TOPIC_PAYMENT_CONFIRMED;
 
 @Slf4j
 @Component
@@ -18,7 +19,7 @@ public class RecentOrderConsumer {
     private final StringRedisTemplate redisTemplate;
 
     @KafkaListener(
-            topics = RECENT_ORDER_PREFIX,
+            topics = TOPIC_PAYMENT_CONFIRMED,
             groupId = RECENT_ORDER_CONSUMER_GROUP,
             containerFactory = "recentOrderKafkaListenerContainerFactory"
     )

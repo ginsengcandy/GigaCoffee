@@ -2,32 +2,26 @@ package com.example.gigacoffee.domain.point.service;
 
 import com.example.gigacoffee.common.exception.BusinessException;
 import com.example.gigacoffee.common.exception.ErrorCode;
-import com.example.gigacoffee.common.kafka.model.event.PaymentConfirmedEvent;
 import com.example.gigacoffee.common.payment.PaymentGateway;
 import com.example.gigacoffee.common.payment.PaymentResult;
-import com.example.gigacoffee.domain.order.entity.Order;
-import com.example.gigacoffee.domain.order.enums.OrderStatus;
-import com.example.gigacoffee.domain.order.repository.OrderRepository;
 import com.example.gigacoffee.domain.point.dto.PointChargeRequest;
 import com.example.gigacoffee.domain.point.dto.PointChargeResponse;
 import com.example.gigacoffee.domain.point.dto.PointPaymentResponse;
 import com.example.gigacoffee.domain.point.entity.PointCharge;
-import com.example.gigacoffee.domain.point.entity.PointPayment;
 import com.example.gigacoffee.domain.point.entity.UserPoint;
 import com.example.gigacoffee.domain.point.enums.PointChargeType;
-import com.example.gigacoffee.domain.point.producer.PaymentEventProducer;
 import com.example.gigacoffee.domain.point.repository.PointChargeRepository;
-import com.example.gigacoffee.domain.point.repository.PointPaymentRepository;
 import com.example.gigacoffee.domain.point.repository.UserPointRepository;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -36,79 +30,43 @@ import java.util.concurrent.TimeUnit;
 public class PointService {
 
     private final UserPointRepository userPointRepository;
-    private final PointPaymentRepository pointPaymentRepository;
-    private final OrderRepository orderRepository;
     private final RedissonClient redissonClient;
-    private final PaymentEventProducer paymentEventProducer;
     private final PaymentGateway paymentGateway;
     private final PointChargeRepository pointChargeRepository;
+    private final PointPaymentExecutor pointPaymentExecutor;
 
-    @Transactional
+    /**
+     * 분산 락으로 직렬화한 뒤, 별도 Bean(PointPaymentExecutor)의 @Transactional 메서드를 호출한다.
+     * 이 메서드 자체는 @Transactional 을 갖지 않으므로, executor.execute() 가 return 하는 시점
+     * (= DB 커밋 완료) 이후에 finally 의 unlock() 이 실행된다.
+     * 이전 구조(락 해제가 커밋 전에 발생)에서 발생하던 이중 결제 버그가 해소된다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PointPaymentResponse makePayment(Long userId, Long orderId) {
         RLock lock = redissonClient.getLock("point:lock:" + userId);
 
         try {
-            if (!lock.tryLock(3, 3, TimeUnit.SECONDS)) {
+            if (!lock.tryLock(1, 3, TimeUnit.SECONDS)) {
                 throw new BusinessException(ErrorCode.LOCK_ACQUISITION_FAILED);
             }
 
-            // 1. 주문 조회
-            Order order = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-
-            // 2. 주문 상태 검증
-            if (order.getOrderStatus() != OrderStatus.PENDING) {
-                throw new BusinessException(ErrorCode.ORDER_ALREADY_COMPLETED);
-            }
-
-            // 3. 포인트 잔액 검증 및 차감
-            UserPoint userPoint = userPointRepository.findByUserId(userId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.POINT_NOT_FOUND));
-
-            userPoint.deduct(order.getTotalPrice());
-
-            // 4. 결제 이력 저장
-            PointPayment pointPayment = PointPayment.create(
-                    userId,
-                    order.getId(),
-                    order.getTotalPrice()
-            );
-            pointPaymentRepository.save(pointPayment);
-
-            // 5. 주문 상태 변경
-            order.complete();
-
-            // 6. 트랜잭션 커밋 후 Kafka 이벤트 발행
-            List<PaymentConfirmedEvent.MenuQuantity> menuQuantities = order.getOrderMenus().stream()
-                    .map(orderMenu -> new PaymentConfirmedEvent.MenuQuantity(
-                            orderMenu.getMenu().getId(),
-                            orderMenu.getQuantity()
-                    ))
-                    .toList();
-
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            paymentEventProducer.sendPaymentConfirmed(
-                                    new PaymentConfirmedEvent(userId, menuQuantities, order.getTotalPrice())
-                            );
-                        }
-                    }
-            );
-
-            return PointPaymentResponse.of(userPoint, order.getTotalPrice());
+            return pointPaymentExecutor.execute(userId, orderId); // TX 커밋 후 return
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException(ErrorCode.LOCK_ACQUISITION_FAILED);
         } finally {
             if (lock.isHeldByCurrentThread()) {
-                lock.unlock();
+                lock.unlock(); // TX 커밋 완료 이후 락 해제
             }
         }
     }
 
+    @Retryable(
+            retryFor = OptimisticLockingFailureException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 100)
+    )
     @Transactional
     public PointChargeResponse charge(Long userId, PointChargeRequest request) {
         // 1. Mock 결제 실행
