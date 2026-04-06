@@ -197,6 +197,7 @@ k6를 Docker 컨테이너로 실행한다. 서버는 `host.docker.internal:8080`
 |---|---|---|---|
 | `k6/menu-cache-test.js` | Redis 캐시 히트 성능 및 thundering herd 관찰 | 100 | ~105s |
 | `k6/payment-concurrency-test.js` | 분산락(Redisson) 중복 결제 방지 검증 | 10 | ~0.4s |
+| `k6/order-flow-test.js` | 전체 주문 플로우 처리량 및 병목 검증 | 80 | ~8m |
 
 ### menu-cache-test.js
 
@@ -273,6 +274,37 @@ Spring의 `@Transactional`은 메서드가 리턴된 후 커밋되고, `finally`
 `PointPayment.orderId`의 DB unique 제약이 최후의 방어선으로 작동해 중복 결제는 차단됐으나 이는 구조적 안전장치가 아니다.
 개선 방향은 [프로젝트 개선 사항](#프로젝트-개선-사항) 참고.
 
+### order-flow-test.js
+
+#### 테스트 개요
+
+| 항목 | 내용 |
+|---|---|
+| 대상 API | `GET /api/menus` → `POST /api/orders` → `POST /api/orders/{id}/payment` → `GET /api/orders/recent` |
+| 부하 단계 | 0→80 VU (1m) → 80 VU 유지 (4m) → 80 VU 유지 내구성 (2m) → cool-down (1m) |
+| Setup | VU당 계정 사전 생성, 포인트 3,000,000 충전 (VU당 최대 ~500회 주문 여유) |
+| Threshold | 단계별 p95 목표, 에러율 < 1%, flow_error_rate < 5% |
+
+#### 측정 결과
+
+| 단계 | avg | p95 | max | Threshold |
+|---|---|---|---|---|
+| 메뉴 조회 | 6.08ms | 17.11ms | 161ms | < 100ms ✓ |
+| 주문 생성 | 11.3ms | 26.25ms | 192ms | < 500ms ✓ |
+| 결제 | 16.3ms | 36.72ms | 194ms | < 1000ms ✓ |
+| 최근 주문 | 6.84ms | 18.07ms | 210ms | < 300ms ✓ |
+
+- 총 처리량: 54.7 완전한 플로우/s (219 HTTP req/s)
+- 완료 플로우: 26,992건 / 8분
+- flow_error_rate: 0.00%, http_req_failed: 0.00%
+- 모든 Threshold 통과 ✓
+
+#### 분석
+
+- **결제(16.3ms)가 유일한 병목 후보**: 다른 단계 대비 5ms 추가 소요. Redisson 락 획득 → 포인트 차감 → Kafka 이벤트 발행이 순차 실행되기 때문이다. 각 VU가 독립된 orderId를 사용하므로 락 경합은 없으며, 이 수치는 순수 처리 지연이다.
+- **내구성 이상 없음**: Phase 3(5~7분)의 레이턴시 분포가 Phase 2와 동일 수준으로 유지됨. GC 압박·DB 커넥션 고갈 없음.
+- **setup 포인트 충전량**: 초기 1,000,000으로 설정했을 때 VU당 ~200회 한도 초과로 결제 30% 실패. 3,000,000으로 조정 후 0% 달성.
+
 ### 실행 방법
 
 ```bash
@@ -282,6 +314,7 @@ docker exec -it <redis-container> redis-cli DEL menus:all
 # 프로젝트 루트에서 실행
 docker run --rm -v "$(pwd)/k6:/k6" grafana/k6 run /k6/menu-cache-test.js
 docker run --rm -v "$(pwd)/k6:/k6" grafana/k6 run /k6/payment-concurrency-test.js
+docker run --rm -v "$(pwd)/k6:/k6" grafana/k6 run /k6/order-flow-test.js
 ```
 
 ### 예시

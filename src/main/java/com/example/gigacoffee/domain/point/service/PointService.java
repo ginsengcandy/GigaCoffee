@@ -22,6 +22,9 @@ import com.example.gigacoffee.domain.point.repository.UserPointRepository;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -48,7 +51,7 @@ public class PointService {
         RLock lock = redissonClient.getLock("point:lock:" + userId);
 
         try {
-            if (!lock.tryLock(3, 3, TimeUnit.SECONDS)) {
+            if (!lock.tryLock(1, 3, TimeUnit.SECONDS)) {
                 throw new BusinessException(ErrorCode.LOCK_ACQUISITION_FAILED);
             }
 
@@ -109,6 +112,11 @@ public class PointService {
         }
     }
 
+    @Retryable(
+            retryFor = OptimisticLockingFailureException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 100)
+    )
     @Transactional
     public PointChargeResponse charge(Long userId, PointChargeRequest request) {
         // 1. Mock 결제 실행
