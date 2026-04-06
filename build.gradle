@@ -20,6 +20,12 @@ repositories {
 
 dependencies {
 
+    // Testcontainers BOM
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.3')
+
+    // Actuator
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
     // Web
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -29,7 +35,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-orgjson:0.12.6'
+    runtimeOnly 'org.json:json:20240303'
 
     // Database
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -46,12 +53,19 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
+    // Retry
+    implementation 'org.springframework.retry:spring-retry:2.0.9'
+
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mysql'
+    testImplementation 'org.testcontainers:kafka'
     testImplementation 'org.springframework.security:spring-security-test'
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'com.h2database:h2'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
