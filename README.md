@@ -24,20 +24,20 @@
 
 ### API 목록
 
-| 라벨 | API명 | 메서드 | Endpoint |
-|---|---|---|---|
-| Must | 커피 메뉴 목록 조회 | GET | /api/menus |
-| Must | 포인트 충전 | POST | /api/points/charge |
-| Must | 커피 주문(장바구니 생성) | POST | /api/orders |
-| Must | 포인트 결제(장바구니 결제) | POST | /api/orders/{orderId}/payment |
-| Must | 인기 메뉴 목록 조회 | GET | /api/menus/popular |
-| Should | 최근 주문 내역 조회 (5개) | GET | /api/orders/recent |
-| Should | 주문 취소(장바구니 삭제) | DELETE | /api/orders/{orderId} |
-| Should | 회원 탈퇴 | DELETE | /api/users/me |
-| Could | 내 포인트 조회 | GET | /api/points |
-| Could | 커피 메뉴 등록 | POST | /api/admin/menus |
-| Could | 커피 메뉴 삭제 | DELETE | /api/admin/menus/{menuId} |
-| Could | 커피 메뉴 수정 | PUT | /api/admin/menus/{menuId} |
+| 라벨 | API명 | 메서드 | Endpoint | 비고
+|---|---|---|---|---|
+| Must | 커피 메뉴 목록 조회 | GET | /api/menus | 완료
+| Must | 포인트 충전 | POST | /api/points/charge | 완료
+| Must | 커피 주문(장바구니 생성) | POST | /api/orders | 완료
+| Must | 포인트 결제(장바구니 결제) | POST | /api/orders/{orderId}/payment | 완료
+| Must | 인기 메뉴 목록 조회 | GET | /api/menus/popular | 완료
+| Should | 최근 주문 내역 조회 (5개) | GET | /api/orders/recent | 완료
+| Should | 주문 취소(장바구니 삭제) | DELETE | /api/orders/{orderId} | 완료
+| Should | 회원 탈퇴 | DELETE | /api/users/me | 미완료(추후 보완 예정)
+| Could | 내 포인트 조회 | GET | /api/points | 미완료(추후 보완 예정)
+| Could | 커피 메뉴 등록 | POST | /api/admin/menus | 미완료(추후 보완 예정)
+| Could | 커피 메뉴 삭제 | DELETE | /api/admin/menus/{menuId} | 미완료(추후 보완 예정)
+| Could | 커피 메뉴 수정 | PUT | /api/admin/menus/{menuId} | 미완료(추후 보완 예정)
 
 ### 시스템 구성
 
